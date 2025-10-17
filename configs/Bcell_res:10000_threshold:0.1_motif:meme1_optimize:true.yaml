@@ -5,7 +5,7 @@ input:
 
 # Output configuration
 output:
-  directory: "outputs/Bcell_res:10000_threshold:0.1/"
+  directory: "outputs/Bcell_res:10000_threshold:0.1_motif:meme1_optimize:true/"
 
 # Loop filtering options
 loops:
@@ -14,10 +14,10 @@ loops:
 # Motif analysis (optional - omit or set to null to skip)
 motif_analysis:
   fasta: /net/noble/vol4/user/gmurtaza/doulatov_hic_data/4DN_supporting_files/GRCh38_no_alt_analysis_set_GCA_000001405.15.fa  # Path to reference genome FASTA file
-  motif: /net/noble/vol1/home/gmurtaza/Documents/2025_gmurtaza_loops-qc/motifs/MA0139.2.meme # Path to motif file in MEME format
+  motif: /net/noble/vol1/home/gmurtaza/Documents/2025_gmurtaza_loops-qc/motifs/MA0139.1.meme # Path to motif file in MEME format
   fdr_threshold: 0.25
   fimo_threshold: "1e-5"
-  optimize_convergent: false
+  optimize_convergent: true
 
 # APA analysis (optional - omit or set to null to skip)
 apa_analysis:

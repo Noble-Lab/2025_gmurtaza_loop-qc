@@ -1,0 +1,28 @@
+# Input BEDPE file
+input:
+  bedpe: "/net/noble/vol4/user/gmurtaza/doulatov_hic_data/shared/hicfoundation_outputs/Bcell/10000/low_res_lc/HiCFoundation_loop_0.1.bedpe"
+  has_header: true  # Set to false if BEDPE file has no header row
+
+# Output configuration
+output:
+  directory: "outputs/Bcell_res:10000_threshold:0.1_motif:meme2_optimize:true/"
+
+# Loop filtering options
+loops:
+  include_interchromosomal: false  # false = intra-chromosomal only, true = all loops
+
+# Motif analysis (optional - omit or set to null to skip)
+motif_analysis:
+  fasta: /net/noble/vol4/user/gmurtaza/doulatov_hic_data/4DN_supporting_files/GRCh38_no_alt_analysis_set_GCA_000001405.15.fa  # Path to reference genome FASTA file
+  motif: /net/noble/vol1/home/gmurtaza/Documents/2025_gmurtaza_loops-qc/motifs/MA0139.2.meme # Path to motif file in MEME format
+  fdr_threshold: 0.25
+  fimo_threshold: "1e-5"
+  optimize_convergent: true
+
+# APA analysis (optional - omit or set to null to skip)
+apa_analysis:
+  hic_file: /net/noble/vol4/user/gmurtaza/doulatov_hic_data/processed/Bcell/Bcell.multires.cool  # Path to .cool or .h5 Hi-C contact matrix file
+  window_size: 25000  # Window size in bp around anchors (±25kb)
+  resolution: 10000  # Resolution of Hi-C matrix in bp
+  nproc: 8  # Number of threads for pileup computation
+  min_loop_length: 200000  # Minimum loop length in bp for APA analysis (e.g., 10000 for 10kb). Set to null to disable
