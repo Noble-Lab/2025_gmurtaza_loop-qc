@@ -151,6 +151,102 @@ def run_fimo(fasta_file, motif_file, output_dir, fimo_threshold='1e-4'):
         return None
 
 
+def parse_fimo_results_all_hits(fimo_tsv_path, fdr_threshold=0.05):
+    """
+    Parse FIMO results and extract ALL hits for each anchor.
+
+    Parameters:
+    -----------
+    fimo_tsv_path : str
+        Path to fimo.tsv results file
+    fdr_threshold : float, default=0.05
+        P-value threshold for filtering hits
+
+    Returns:
+    --------
+    dict
+        Dictionary mapping anchor IDs to list of all hits:
+        {
+            'L1A1': [
+                {'start': int, 'end': int, 'pvalue': float, 'strand': '+', 'qvalue': float},
+                {'start': int, 'end': int, 'pvalue': float, 'strand': '-', 'qvalue': float},
+                ...
+            ],
+            ...
+        }
+    """
+    anchor_all_hits = {}
+
+    if not os.path.exists(fimo_tsv_path):
+        print(f"[motif_analysis][error] FIMO results file not found: {fimo_tsv_path}")
+        return anchor_all_hits
+
+    # Read FIMO results with proper header handling, skip comment lines
+    try:
+        fimo_df = pd.read_csv(fimo_tsv_path, sep='\t', comment='#')
+    except Exception as e:
+        print(f"[motif_analysis][error] Failed to read FIMO TSV file: {e}")
+        return {}
+
+    # Verify we have the required columns
+    required_cols = ['sequence_name', 'start', 'stop', 'strand', 'p-value']
+    missing_cols = [col for col in required_cols if col not in fimo_df.columns]
+    if missing_cols:
+        print(f"[motif_analysis][error] Missing columns in FIMO output: {missing_cols}")
+        print(f"[motif_analysis][error] Available columns: {list(fimo_df.columns)}")
+        return {}
+
+    # Check for NaN values in required columns BEFORE processing
+    nan_mask = fimo_df[required_cols].isnull().any(axis=1)
+    if nan_mask.any():
+        num_nan_rows = nan_mask.sum()
+        print(f"[motif_analysis][warning] Found {num_nan_rows} rows with NaN values in required columns")
+        print(f"[motif_analysis][warning] Removing these rows before parsing")
+        fimo_df = fimo_df.dropna(subset=required_cols)
+
+    if len(fimo_df) == 0:
+        print(f"[motif_analysis][error] No valid FIMO results after filtering out NaN rows")
+        return {}
+
+    # Parse each FIMO hit and store ALL hits (filtered by threshold)
+    try:
+        for _, row in fimo_df.iterrows():
+            anchor_id = row['sequence_name']
+            motif_start = int(row['start'])
+            motif_end = int(row['stop'])
+            strand = row['strand']
+            pvalue = float(row['p-value'])
+            qvalue = float(row['q-value']) if 'q-value' in row else pvalue
+
+            # Filter by threshold
+            if pvalue > fdr_threshold:
+                continue
+
+            # Initialize anchor entry if not exists
+            if anchor_id not in anchor_all_hits:
+                anchor_all_hits[anchor_id] = []
+
+            # Store this hit
+            anchor_all_hits[anchor_id].append({
+                'start': motif_start,
+                'end': motif_end,
+                'pvalue': pvalue,
+                'qvalue': qvalue,
+                'strand': strand
+            })
+
+    except (ValueError, TypeError) as e:
+        print(f"[motif_analysis][error] Failed to parse FIMO row values: {e}")
+        print(f"[motif_analysis][error] Check that start, stop, and p-value columns contain numeric values")
+        return {}
+
+    num_anchors_with_hits = len(anchor_all_hits)
+    total_hits = sum(len(hits) for hits in anchor_all_hits.values())
+    print(f"[motif_analysis][info] Parsed ALL FIMO hits: {num_anchors_with_hits} anchors with hits, {total_hits} total hits")
+
+    return anchor_all_hits
+
+
 def parse_fimo_results(fimo_tsv_path):
     """
     Parse FIMO results and extract best forward and reverse hits for each anchor.
@@ -642,6 +738,128 @@ def generate_statistics(bedpe_df, classifications, category_counts, output_dir):
         print(f"[motif_analysis][error] Failed to save statistics CSV: {e}")
 
     return stats
+
+
+def count_hits_per_anchor(anchor_all_hits, bedpe_df):
+    """
+    Count the number of CTCF hits per anchor across all loops.
+
+    Parameters:
+    -----------
+    anchor_all_hits : dict
+        Dictionary mapping anchor IDs to list of all hits (from parse_fimo_results_all_hits)
+    bedpe_df : pd.DataFrame
+        Original BEDPE DataFrame with loop information
+
+    Returns:
+    --------
+    dict
+        Dictionary with hit count statistics:
+        {
+            'hit_counts': [0, 1, 2, 3, ...],  # List of hit counts per anchor
+            'count_distribution': {0: n0, 1: n1, 2: n2, ...},  # Frequency of each count
+            'total_anchors': int,
+            'anchors_with_hits': int,
+            'mean_hits': float,
+            'median_hits': float
+        }
+    """
+    import numpy as np
+
+    # Calculate total number of anchors (2 per loop)
+    total_anchors = len(bedpe_df) * 2
+
+    # Count hits per anchor
+    hit_counts = []
+    for loop_id in range(1, len(bedpe_df) + 1):
+        anchor1_id = f'L{loop_id}A1'
+        anchor2_id = f'L{loop_id}A2'
+
+        # Count hits for each anchor
+        count1 = len(anchor_all_hits.get(anchor1_id, []))
+        count2 = len(anchor_all_hits.get(anchor2_id, []))
+
+        hit_counts.append(count1)
+        hit_counts.append(count2)
+
+    # Calculate distribution
+    count_distribution = {}
+    for count in hit_counts:
+        count_distribution[count] = count_distribution.get(count, 0) + 1
+
+    # Calculate statistics
+    anchors_with_hits = sum(1 for c in hit_counts if c > 0)
+    mean_hits = np.mean(hit_counts)
+    median_hits = np.median(hit_counts)
+
+    # Print summary
+    print(f"\n[motif_analysis][info] ===== CTCF Hit Distribution =====")
+    print(f"[motif_analysis][info] Total anchors: {total_anchors}")
+    print(f"[motif_analysis][info] Anchors with hits: {anchors_with_hits} ({anchors_with_hits/total_anchors*100:.1f}%)")
+    print(f"[motif_analysis][info] Mean hits per anchor: {mean_hits:.2f}")
+    print(f"[motif_analysis][info] Median hits per anchor: {median_hits:.1f}")
+    print(f"[motif_analysis][info]")
+    print(f"[motif_analysis][info] Hit count distribution:")
+
+    # Sort by hit count for display
+    for count in sorted(count_distribution.keys()):
+        num_anchors = count_distribution[count]
+        pct = num_anchors / total_anchors * 100
+        print(f"[motif_analysis][info]   {count} hits: {num_anchors:>8} anchors ({pct:>5.1f}%)")
+
+    print(f"[motif_analysis][info] =====================================\n")
+
+    return {
+        'hit_counts': hit_counts,
+        'count_distribution': count_distribution,
+        'total_anchors': total_anchors,
+        'anchors_with_hits': anchors_with_hits,
+        'mean_hits': mean_hits,
+        'median_hits': median_hits
+    }
+
+
+def save_hit_distribution_stats(hit_stats, output_dir):
+    """
+    Save CTCF hit distribution statistics to CSV.
+
+    Parameters:
+    -----------
+    hit_stats : dict
+        Hit count statistics from count_hits_per_anchor()
+    output_dir : str
+        Output directory for CSV file
+
+    Returns:
+    --------
+    str
+        Path to saved CSV file
+    """
+    import os
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Create DataFrame from count distribution
+    count_dist = hit_stats['count_distribution']
+    total_anchors = hit_stats['total_anchors']
+
+    data = []
+    for count in sorted(count_dist.keys()):
+        num_anchors = count_dist[count]
+        pct = num_anchors / total_anchors * 100
+        data.append({
+            'num_hits': count,
+            'num_anchors': num_anchors,
+            'percentage': f"{pct:.2f}"
+        })
+
+    df = pd.DataFrame(data)
+    csv_path = os.path.join(output_dir, 'ctcf_hit_distribution.csv')
+    df.to_csv(csv_path, index=False)
+
+    print(f"[motif_analysis][info] CTCF hit distribution saved to: {csv_path}")
+
+    return csv_path
 
 
 def output_separated_bedpe(bedpe_df, classifications, anchor_states, output_dir):

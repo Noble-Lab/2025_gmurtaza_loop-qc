@@ -17,16 +17,19 @@ from src.utils import (
     filter_by_loop_length,
     setup_output_directories
 )
-from src.visualizations import plot_loop_length_violin_by_category, plot_apa_comparison_heatmaps
+from src.visualizations import plot_loop_length_violin_by_category, plot_apa_comparison_heatmaps, plot_ctcf_hit_distribution
 from src.motif_analysis import (
     extract_anchors_to_bed,
     extract_anchor_fasta,
     run_fimo,
     parse_fimo_results,
+    parse_fimo_results_all_hits,
     determine_anchor_states,
     classify_loops,
     generate_statistics,
-    output_separated_bedpe
+    output_separated_bedpe,
+    count_hits_per_anchor,
+    save_hit_distribution_stats
 )
 from src.apa_analysis import run_apa_by_category
 
@@ -107,8 +110,23 @@ def main():
             print("[main][error] FIMO motif scanning failed or found no hits")
             sys.exit(1)
 
-        # Parse FIMO results
-        print("[main][info] Parsing FIMO results...")
+        # Parse ALL FIMO hits for distribution analysis
+        print("[main][info] Parsing ALL FIMO hits for distribution analysis...")
+        anchor_all_hits = parse_fimo_results_all_hits(fimo_results, fdr_threshold=motif_config['fdr_threshold'])
+
+        # Count hits per anchor and generate statistics
+        print("[main][info] Counting CTCF hits per anchor...")
+        hit_stats = count_hits_per_anchor(anchor_all_hits, loops_df)
+
+        # Save hit distribution statistics
+        save_hit_distribution_stats(hit_stats, out_dirs['generated_files'])
+
+        # Generate hit distribution plot
+        print("[main][info] Generating CTCF hit distribution plot...")
+        plot_ctcf_hit_distribution(hit_stats, out_dirs['figures'])
+
+        # Now parse FIMO results using best-per-strand method for loop classification
+        print("[main][info] Parsing FIMO results (best per strand) for loop classification...")
         anchor_hits = parse_fimo_results(fimo_results)
 
         # Determine anchor states

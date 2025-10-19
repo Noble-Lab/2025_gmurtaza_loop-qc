@@ -219,6 +219,75 @@ def plot_loop_length_violin_by_category(bedpe_dfs, figure_dir, generated_files_d
     plt.close()
 
 
+def plot_ctcf_hit_distribution(hit_stats, figure_dir, filename='ctcf_hit_distribution.png'):
+    """
+    Create a bar plot showing the distribution of CTCF hits per anchor.
+
+    Parameters:
+    -----------
+    hit_stats : dict
+        Hit count statistics from count_hits_per_anchor()
+    figure_dir : str
+        Directory to save the output figure
+    filename : str, default='ctcf_hit_distribution.png'
+        Name of the output file
+
+    Returns:
+    --------
+    None
+        Saves figure to figure_dir/filename
+    """
+    count_dist = hit_stats['count_distribution']
+    total_anchors = hit_stats['total_anchors']
+
+    # Sort hit counts
+    hit_counts = sorted(count_dist.keys())
+    num_anchors = [count_dist[count] for count in hit_counts]
+    percentages = [count_dist[count] / total_anchors * 100 for count in hit_counts]
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Create bar plot
+    bars = ax.bar(hit_counts, num_anchors, color='steelblue', alpha=0.8, edgecolor='black', linewidth=1.5)
+
+    # Add percentage labels on top of bars
+    for i, (count, num, pct) in enumerate(zip(hit_counts, num_anchors, percentages)):
+        if pct > 0.5:  # Only show label if percentage is significant enough
+            ax.text(count, num, f'{pct:.1f}%', ha='center', va='bottom', fontsize=FONT_SIZE-2, fontweight='bold')
+
+    # Labels and title
+    ax.set_xlabel('Number of CTCF Hits per Anchor', fontsize=FONT_SIZE, fontweight='bold')
+    ax.set_ylabel('Number of Anchors', fontsize=FONT_SIZE, fontweight='bold')
+    ax.set_title(f'Distribution of CTCF Hits Across {total_anchors:,} Anchors', fontsize=FONT_SIZE+2, fontweight='bold')
+
+    # Set x-axis to show all hit counts
+    ax.set_xticks(hit_counts)
+    ax.tick_params(axis='both', labelsize=FONT_SIZE)
+
+    # Grid for readability
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
+
+    # Add summary statistics as text box
+    stats_text = f"Mean: {hit_stats['mean_hits']:.2f}\nMedian: {hit_stats['median_hits']:.1f}\nAnchors with hits: {hit_stats['anchors_with_hits']:,} ({hit_stats['anchors_with_hits']/total_anchors*100:.1f}%)"
+    ax.text(0.98, 0.97, stats_text, transform=ax.transAxes, fontsize=FONT_SIZE-2,
+            verticalalignment='top', horizontalalignment='right',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+    # Tight layout
+    plt.tight_layout()
+
+    # Save figure
+    os.makedirs(figure_dir, exist_ok=True)
+    output_path = os.path.join(figure_dir, filename)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"[visualizations][info] Saved CTCF hit distribution plot: {output_path}")
+
+    # Close the figure
+    plt.close()
+
+
 def plot_apa_comparison_heatmaps(categories_results, output_dir, resolution, window_size):
     """
     Create comparison APA heatmaps for all loop categories in one figure.
